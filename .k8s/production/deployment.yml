@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: time-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: time-tracker
+  template:
+    metadata:
+      labels:
+        app: time-tracker
+    spec:
+      containers:
+        - name: tracker
+          image: 'us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:production'
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: time-tracker-credentials
+                  key: MONGO_URI
+            - name: API_ENV
+              value: production
+            - name: PORT
+              value: '8080'
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: time-tracker
+spec:
+  selector:
+    app: time-tracker
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer

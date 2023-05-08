@@ -3,7 +3,7 @@ FROM node:16.17.0-alpine3.16 as build
 ENV MONOREPO_WORKDIR=/project
 ENV PROJECT_WORKDIR=/project/packages/api
 
-RUN apk update && apk add --no-cache git=2.36.2-r0
+RUN apk update && apk add --no-cache git=2.36.6-r0
 
 RUN mkdir -p $MONOREPO_WORKDIR
 WORKDIR $MONOREPO_WORKDIR/

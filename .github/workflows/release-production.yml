@@ -1,0 +1,54 @@
+name: Release Production
+on:
+  push:
+    branches:
+      - master
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  GKE_CLUSTER: tracker
+  GKE_ZONE: us-central1-a
+
+jobs:
+  build-and-release-api:
+    name: Build and release API
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure GCP auth
+        uses: google-github-actions/auth@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up GCloud
+        uses: 'google-github-actions/setup-gcloud@v0'
+        with:
+          version: '406.0.0'
+
+      - name: Configure docker
+        run: |-
+          gcloud --quiet auth configure-docker us-central1-docker.pkg.dev
+
+      - name: Build image
+        run: |-
+          docker build -f packages/api/Dockerfile -t "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA" .
+      - name: Publish image
+        run: |-
+          docker tag "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA" "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA-production"
+          docker tag "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA" "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:production"
+          docker push "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA-production"
+          docker push "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:production"
+
+      - name: Release API
+        run: |-
+          gcloud components install gke-gcloud-auth-plugin kubectl --quiet 1> /dev/null
+          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
+          gcloud container clusters get-credentials "$GKE_CLUSTER" --zone "$GKE_ZONE"
+          envsubst < .k8s/production/deployment.yml | kubectl apply -f -
+          kubectl set image deployment/time-tracker tracker=us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA-production
+          kubectl rollout restart deployment/time-tracker
