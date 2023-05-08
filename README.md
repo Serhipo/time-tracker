@@ -4,6 +4,11 @@ This is a simple API for a time tracker application. The API allows you to creat
 
 **Note:** It's also worth noting that it's the beginning of the month, so when generating the data, only a small percentage of the created blocks will be included in the report.
 
+## Implemented endpoints
+
+- `/block/makeData` - generate a number of data objects and save them in a database.
+- `/report/thisMonthReport` - return a summary of the generated objects
+
 ## Development
 
 Install project dependencies with Yarn: `$ yarn`
