@@ -5,50 +5,25 @@ on:
       - master
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  REGION: us-central1
-  GKE_CLUSTER: tracker
-  GKE_ZONE: us-central1-a
+  HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+  HEROKU_APP_NAME: ${{ secrets.HEROKU_APP_NAME }}
+  HEROKU_LOGIN: ${{ secrets.HEROKU_LOGIN }}
 
 jobs:
-  build-and-release-api:
-    name: Build and release API
-    runs-on: ubuntu-22.04
+  build:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v2
 
-      - name: Configure GCP auth
-        uses: google-github-actions/auth@v0
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Login to Heroku Container registry
+        run: docker login --username=$HEROKU_LOGIN --password=$HEROKU_API_KEY registry.heroku.com
 
-      - name: Set up GCloud
-        uses: 'google-github-actions/setup-gcloud@v0'
-        with:
-          version: '406.0.0'
+      - name: Build and push Docker image
+        run: |
+          docker build -f packages/api/Dockerfile -t registry.heroku.com/$HEROKU_APP_NAME/web .
+          docker push registry.heroku.com/$HEROKU_APP_NAME/web
 
-      - name: Configure docker
-        run: |-
-          gcloud --quiet auth configure-docker us-central1-docker.pkg.dev
-
-      - name: Build image
-        run: |-
-          docker build -f packages/api/Dockerfile -t "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA" .
-      - name: Publish image
-        run: |-
-          docker tag "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA" "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA-production"
-          docker tag "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA" "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:production"
-          docker push "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA-production"
-          docker push "us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:production"
-
-      - name: Release API
-        run: |-
-          gcloud components install gke-gcloud-auth-plugin kubectl --quiet 1> /dev/null
-          export USE_GKE_GCLOUD_AUTH_PLUGIN=True
-          gcloud container clusters get-credentials "$GKE_CLUSTER" --zone "$GKE_ZONE"
-          envsubst < .k8s/production/deployment.yml | kubectl apply -f -
-          kubectl set image deployment/time-tracker tracker=us-central1-docker.pkg.dev/$PROJECT_ID/time-tracker/api:$GITHUB_SHA-production
-          kubectl rollout restart deployment/time-tracker
+      - name: Deploy to Heroku
+        run: |
+          heroku container:release web --app $HEROKU_APP_NAME
